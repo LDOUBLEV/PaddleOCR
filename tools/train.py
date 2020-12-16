@@ -90,7 +90,6 @@ def main(config, device, logger, vdl_writer):
     program.train(config, train_dataloader, valid_dataloader, device, model,
                   loss_class, optimizer, lr_scheduler, post_process_class,
                   eval_class, pre_best_model_dict, logger, vdl_writer)
-    program.save_inference_mode(model, config, logger)
 
 
 def test_reader(config, device, logger):
@@ -109,56 +108,56 @@ def test_reader(config, device, logger):
     except Exception as e:
         logger.info(e)
     logger.info("finish reader: {}, Success!".format(count))
-    
-    
+
+
 def test_decoder(config, devices, logger):
     import copy
     from ppocr.data.lmdb_dataset import LMDBDateSet
-    
+
     loader = build_dataloader(config, 'Train', device, logger)
-#     mode = 'Train'
-#     config = copy.deepcopy(config)
+    #     mode = 'Train'
+    #     config = copy.deepcopy(config)
 
-#     support_dict = ['SimpleDataSet', 'LMDBDateSet']
-#     module_name = config[mode]['dataset']['name']
-#     assert module_name in support_dict, Exception(
-#         'DataSet only support {}'.format(support_dict))
-#     assert mode in ['Train', 'Eval', 'Test'
-#                     ], "Mode should be Train, Eval or Test."
+    #     support_dict = ['SimpleDataSet', 'LMDBDateSet']
+    #     module_name = config[mode]['dataset']['name']
+    #     assert module_name in support_dict, Exception(
+    #         'DataSet only support {}'.format(support_dict))
+    #     assert mode in ['Train', 'Eval', 'Test'
+    #                     ], "Mode should be Train, Eval or Test."
 
-#     loader = eval(module_name)(config, mode, logger)
-    
+    #     loader = eval(module_name)(config, mode, logger)
+
     import time
     starttime = time.time()
-    
+
     global_config = config['Global']
     post_process_class = build_post_process(config['PostProcess'],
                                             global_config)
     config['PostProcess']['name'] = 'CTCLabelDecode'
-    post_process_ctc = build_post_process(config['PostProcess'],
-                                            global_config)
+    post_process_ctc = build_post_process(config['PostProcess'], global_config)
     import sys
     logger.info("charactor dict: {}".format(post_process_class.character))
     for idx, data in enumerate(loader()):
-        
+
         batch_time = time.time() - starttime
         starttime = time.time()
-        logger.info("reader: {}, {}, {}".format(
-                    idx, len(data[0]), batch_time))
+        logger.info("reader: {}, {}, {}".format(idx, len(data[0]), batch_time))
         image = data[0]
         labels = data[1]
-        logger.info("idx: {}, label.shape: {}, label: {}".format(idx, labels.shape, labels.numpy()))
-        text1 = post_process_class.decode(labels.numpy()[:, :-1], is_remove_duplicate=False)
-#         text2 = post_process_ctc.decode(labels, is_remove_duplicate=False)
+        logger.info("idx: {}, label.shape: {}, label: {}".format(
+            idx, labels.shape, labels.numpy()))
+        text1 = post_process_class.decode(
+            labels.numpy()[:, :-1], is_remove_duplicate=False)
+        #         text2 = post_process_ctc.decode(labels, is_remove_duplicate=False)
         logger.info("{} GT label: {}".format(idx, text1))
-#         logger.info("{} GT CTC label: {} ".format(idx, text2))
+        #         logger.info("{} GT CTC label: {} ".format(idx, text2))
         if idx > 2:
             sys.exit()
-        
-    
+
+
 if __name__ == '__main__':
     config, device, logger, vdl_writer = program.preprocess()
-    
+
     main(config, device, logger, vdl_writer)
     #test_reader(config, device, logger)
     #test_decoder(config, device, logger)

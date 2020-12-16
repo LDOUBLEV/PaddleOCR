@@ -37,32 +37,51 @@ class TextDetector(object):
     def __init__(self, args):
         self.det_algorithm = args.det_algorithm
         self.use_zero_copy_run = args.use_zero_copy_run
+        pre_process_list = [{
+            'DetResizeForTest': {
+                'limit_side_len': args.det_limit_side_len,
+                'limit_type': args.det_limit_type
+            }
+        }, {
+            'NormalizeImage': {
+                'std': [0.229, 0.224, 0.225],
+                'mean': [0.485, 0.456, 0.406],
+                'scale': '1./255.',
+                'order': 'hwc'
+            }
+        }, {
+            'ToCHWImage': None
+        }, {
+            'KeepKeys': {
+                'keep_keys': ['image', 'shape']
+            }
+        }]
         postprocess_params = {}
         if self.det_algorithm == "DB":
-            pre_process_list = [{
-                'DetResizeForTest': {
-                    'limit_side_len': args.det_limit_side_len,
-                    'limit_type': args.det_limit_type
-                }
-            }, {
-                'NormalizeImage': {
-                    'std': [0.229, 0.224, 0.225],
-                    'mean': [0.485, 0.456, 0.406],
-                    'scale': '1./255.',
-                    'order': 'hwc'
-                }
-            }, {
-                'ToCHWImage': None
-            }, {
-                'KeepKeys': {
-                    'keep_keys': ['image', 'shape']
-                }
-            }]
             postprocess_params['name'] = 'DBPostProcess'
             postprocess_params["thresh"] = args.det_db_thresh
             postprocess_params["box_thresh"] = args.det_db_box_thresh
             postprocess_params["max_candidates"] = 1000
             postprocess_params["unclip_ratio"] = args.det_db_unclip_ratio
+            postprocess_params["use_dilation"] = True
+        elif self.det_algorithm == "EAST":
+            postprocess_params['name'] = 'EASTPostProcess'      
+            postprocess_params["score_thresh"] = args.det_east_score_thresh
+            postprocess_params["cover_thresh"] = args.det_east_cover_thresh
+            postprocess_params["nms_thresh"] = args.det_east_nms_thresh
+        elif self.det_algorithm == "SAST":
+            postprocess_params['name'] = 'SASTPostProcess'      
+            postprocess_params["score_thresh"] = args.det_sast_score_thresh
+            postprocess_params["nms_thresh"] = args.det_sast_nms_thresh
+            self.det_sast_polygon = args.det_sast_polygon
+            if self.det_sast_polygon:
+                postprocess_params["sample_pts_num"] = 6
+                postprocess_params["expand_scale"] = 1.2
+                postprocess_params["shrink_ratio_of_width"] = 0.2
+            else:
+                postprocess_params["sample_pts_num"] = 2
+                postprocess_params["expand_scale"] = 1.0
+                postprocess_params["shrink_ratio_of_width"] = 0.3
         else:
             logger.info("unknown det_algorithm:{}".format(self.det_algorithm))
             sys.exit(0)
@@ -111,7 +130,7 @@ class TextDetector(object):
             box = self.clip_det_res(box, img_height, img_width)
             rect_width = int(np.linalg.norm(box[0] - box[1]))
             rect_height = int(np.linalg.norm(box[0] - box[3]))
-            if rect_width <= 10 or rect_height <= 10:
+            if rect_width <= 3 or rect_height <= 3:
                 continue
             dt_boxes_new.append(box)
         dt_boxes = np.array(dt_boxes_new)
@@ -148,12 +167,25 @@ class TextDetector(object):
         for output_tensor in self.output_tensors:
             output = output_tensor.copy_to_cpu()
             outputs.append(output)
-        preds = outputs[0]
 
-        # preds = self.predictor(img)
+        preds = {}
+        if self.det_algorithm == "EAST":
+            preds['f_geo'] = outputs[0]
+            preds['f_score'] = outputs[1]
+        elif self.det_algorithm == 'SAST':
+            preds['f_border'] = outputs[0]
+            preds['f_score'] = outputs[1]
+            preds['f_tco'] = outputs[2]
+            preds['f_tvo'] = outputs[3]
+        else:
+            preds = outputs[0]
+
         post_result = self.postprocess_op(preds, shape_list)
         dt_boxes = post_result[0]['points']
-        dt_boxes = self.filter_tag_det_res(dt_boxes, ori_im.shape)
+        if self.det_algorithm == "SAST" and self.det_sast_polygon:
+            dt_boxes = self.filter_tag_det_res_only_clip(dt_boxes, ori_im.shape)
+        else:
+            dt_boxes = self.filter_tag_det_res(dt_boxes, ori_im.shape)
         elapse = time.time() - starttime
         return dt_boxes, elapse
 
@@ -174,15 +206,16 @@ if __name__ == "__main__":
         if img is None:
             logger.info("error in loading image:{}".format(image_file))
             continue
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         dt_boxes, elapse = text_detector(img)
         if count > 0:
             total_time += elapse
         count += 1
-        print("Predict time of %s:" % image_file, elapse)
+        logger.info("Predict time of {}: {}".format(image_file, elapse))
         src_im = utility.draw_text_det_res(dt_boxes, image_file)
-        img_name_pure = image_file.split("/")[-1]
-        cv2.imwrite(
-            os.path.join(draw_img_save, "det_res_%s" % img_name_pure), src_im)
+        img_name_pure = os.path.split(image_file)[-1]
+        img_path = os.path.join(draw_img_save,
+                                "det_res_{}".format(img_name_pure))
+        cv2.imwrite(img_path, src_im)
+        logger.info("The visualized image saved in {}".format(img_path))
     if count > 1:
-        print("Avg Time:", total_time / (count - 1))
+        logger.info("Avg Time: {}".format(total_time / (count - 1)))

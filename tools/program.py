@@ -113,7 +113,6 @@ def merge_config(config):
                 global_config.keys(), sub_keys[0])
             cur = global_config[sub_keys[0]]
             for idx, sub_key in enumerate(sub_keys[1:]):
-                assert (sub_key in cur)
                 if idx == len(sub_keys) - 2:
                     cur[sub_key] = value
                 else:
@@ -198,7 +197,7 @@ def train(config,
             labels = batch[1]
             if "RARE" == config['Architecture']['algorithm']:
                 preds = model(images, targets=labels)
-                batch[1] = labels[:, 1:] # without start token 
+                batch[1] = labels[:, 1:]  # without start token 
                 loss = loss_class(preds, batch)
             else:
                 preds = model(images, targets=None)
@@ -242,7 +241,6 @@ def train(config,
                 train_batch_cost = 0.0
                 train_reader_cost = 0.0
                 batch_sum = 0
-                batch_start = time.time()
             # eval
             if global_step > start_eval_step and \
                     (global_step - start_eval_step) % eval_batch_step == 0 and dist.get_rank() == 0:
@@ -281,6 +279,7 @@ def train(config,
                                           best_model_dict[main_indicator],
                                           global_step)
             global_step += 1
+            batch_start = time.time()
         if dist.get_rank() == 0:
             save_model(
                 model,
@@ -338,20 +337,6 @@ def eval(model, valid_dataloader, post_process_class, eval_class):
     model.train()
     metirc['fps'] = total_frame / total_time
     return metirc
-
-
-def save_inference_mode(model, config, logger):
-    model.eval()
-    save_path = '{}/infer/{}'.format(config['Global']['save_model_dir'],
-                                     config['Architecture']['model_type'])
-    if config['Architecture']['model_type'] == 'rec':
-        input_shape = [None, 3, 32, None]
-        jit_model = paddle.jit.to_static(
-            model, input_spec=[paddle.static.InputSpec(input_shape)])
-        paddle.jit.save(jit_model, save_path)
-        logger.info('inference model save to {}'.format(save_path))
-
-    model.train()
 
 
 def preprocess():

@@ -52,6 +52,7 @@ class DetLabelEncode(object):
                 txt_tags.append(True)
             else:
                 txt_tags.append(False)
+        boxes = self.expand_points_num(boxes)
         boxes = np.array(boxes, dtype=np.float32)
         txt_tags = np.array(txt_tags, dtype=np.bool)
 
@@ -70,6 +71,17 @@ class DetLabelEncode(object):
         rect[3] = pts[np.argmax(diff)]
         return rect
 
+    def expand_points_num(self, boxes):
+        max_points_num = 0
+        for box in boxes:
+            if len(box) > max_points_num:
+                max_points_num = len(box)
+        ex_boxes = []
+        for box in boxes:
+            ex_box = box + [box[-1]] * (max_points_num - len(box))
+            ex_boxes.append(ex_box)
+        return ex_boxes
+
 
 class BaseRecLabelEncode(object):
     """ Convert between text-label and text-index """
@@ -79,15 +91,17 @@ class BaseRecLabelEncode(object):
                  character_dict_path=None,
                  character_type='ch',
                  use_space_char=False):
-        support_character_type = ['ch', 'en', 'en_sensitive']
+        support_character_type = [
+            'ch', 'en', 'en_sensitive', 'french', 'german', 'japan', 'korean'
+        ]
         assert character_type in support_character_type, "Only {} are supported now but get {}".format(
-            support_character_type, self.character_str)
+            support_character_type, character_type)
 
         self.max_text_len = max_text_length
         if character_type == "en":
             self.character_str = "0123456789abcdefghijklmnopqrstuvwxyz"
             dict_character = list(self.character_str)
-        elif character_type == "ch":
+        elif character_type in ["ch", "french", "german", "japan", "korean"]:
             self.character_str = ""
             assert character_dict_path is not None, "character_dict_path should not be None when character_type is ch"
             with open(character_dict_path, "rb") as fin:
@@ -124,7 +138,7 @@ class BaseRecLabelEncode(object):
                     [sum(text_lengths)] = [text_index_0 + text_index_1 + ... + text_index_(n - 1)]
             length: length of each text. [batch_size]
         """
-        if len(text) > self.max_text_len:
+        if len(text) == 0 or len(text) > self.max_text_len:
             return None
         if self.character_type == "en":
             text = text.lower()
@@ -138,9 +152,6 @@ class BaseRecLabelEncode(object):
         if len(text_list) == 0:
             return None
         return text_list
-
-    def get_ignored_tokens(self):
-        return [0]  # for ctc blank
 
 
 class CTCLabelEncode(BaseRecLabelEncode):
@@ -160,8 +171,6 @@ class CTCLabelEncode(BaseRecLabelEncode):
         text = data['label']
         text = self.encode(text)
         if text is None:
-            return None
-        if len(text) > self.max_text_len:
             return None
         data['length'] = np.array(len(text))
         text = text + [0] * (self.max_text_len - len(text))
@@ -200,14 +209,10 @@ class AttnLabelEncode(BaseRecLabelEncode):
         if len(text) > self.max_text_len:
             return None
         data['length'] = np.array(len(text))
-        text = [0] + text + [len(self.character)-1] + [0] * (self.max_text_len - len(text)-1)
+        text = [0] + text + [len(self.character) - 1] + [0] * (self.max_text_len
+                                                               - len(text) - 1)
         data['label'] = np.array(text)
         return data
-
-    def get_ignored_tokens(self):
-        beg_idx = self.get_beg_end_flag_idx("beg")
-        end_idx = self.get_beg_end_flag_idx("end")
-        return [beg_idx, end_idx]
 
     def get_beg_end_flag_idx(self, beg_or_end):
         if beg_or_end == "beg":

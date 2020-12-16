@@ -18,17 +18,21 @@ import copy
 def build_loss(config):
     # det loss
     from .det_db_loss import DBLoss
+    from .det_east_loss import EASTLoss
+    from .det_sast_loss import SASTLoss
 
     # rec loss
     from .rec_ctc_loss import CTCLoss
 
     # cls loss
     from .cls_loss import ClsLoss
-   
+
     # att loss
     from .rec_att_loss import AttentionLoss
 
-    support_dict = ['DBLoss', 'CTCLoss', 'ClsLoss', 'AttentionLoss']
+    support_dict = [
+        'DBLoss', 'EASTLoss', 'SASTLoss', 'CTCLoss', 'ClsLoss', 'AttentionLoss'
+    ]
 
     config = copy.deepcopy(config)
     module_name = config.pop('name')

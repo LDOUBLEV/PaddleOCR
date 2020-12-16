@@ -23,7 +23,7 @@ import copy
 import numpy as np
 import math
 import time
-
+import traceback
 import paddle.fluid as fluid
 
 import tools.infer.utility as utility
@@ -37,7 +37,7 @@ logger = get_logger()
 class TextClassifier(object):
     def __init__(self, args):
         self.cls_image_shape = [int(v) for v in args.cls_image_shape.split(",")]
-        self.cls_batch_num = args.rec_batch_num
+        self.cls_batch_num = args.cls_batch_num
         self.cls_thresh = args.cls_thresh
         self.use_zero_copy_run = args.use_zero_copy_run
         postprocess_params = {
@@ -82,7 +82,7 @@ class TextClassifier(object):
 
         cls_res = [['', 0.0]] * img_num
         batch_num = self.cls_batch_num
-        predict_time = 0
+        elapse = 0
         for beg_img_no in range(0, img_num, batch_num):
             end_img_no = min(img_num, beg_img_no + batch_num)
             norm_img_batch = []
@@ -106,15 +106,15 @@ class TextClassifier(object):
                 norm_img_batch = fluid.core.PaddleTensor(norm_img_batch)
                 self.predictor.run([norm_img_batch])
             prob_out = self.output_tensors[0].copy_to_cpu()
-            cls_res = self.postprocess_op(prob_out)
-            elapse = time.time() - starttime
-            for rno in range(len(cls_res)):
-                label, score = cls_res[rno]
+            cls_result = self.postprocess_op(prob_out)
+            elapse += time.time() - starttime
+            for rno in range(len(cls_result)):
+                label, score = cls_result[rno]
                 cls_res[indices[beg_img_no + rno]] = [label, score]
                 if '180' in label and score > self.cls_thresh:
                     img_list[indices[beg_img_no + rno]] = cv2.rotate(
                         img_list[indices[beg_img_no + rno]], 1)
-        return img_list, cls_res, predict_time
+        return img_list, cls_res, elapse
 
 
 def main(args):
@@ -133,8 +133,8 @@ def main(args):
         img_list.append(img)
     try:
         img_list, cls_res, predict_time = text_classifier(img_list)
-    except Exception as e:
-        print(e)
+    except:
+        logger.info(traceback.format_exc())
         logger.info(
             "ERROR!!!! \n"
             "Please read the FAQ：https://github.com/PaddlePaddle/PaddleOCR#faq \n"
@@ -143,10 +143,10 @@ def main(args):
             "Please set --rec_image_shape='3,32,100' and --rec_char_type='en' ")
         exit()
     for ino in range(len(img_list)):
-        print("Predicts of %s:%s" % (valid_image_file_list[ino], cls_res[ino]))
-    print("Total predict time for %d images, cost: %.3f" %
-          (len(img_list), predict_time))
-
+        logger.info("Predicts of {}:{}".format(valid_image_file_list[ino], cls_res[
+            ino]))
+    logger.info("Total predict time for {} images, cost: {:.3f}".format(
+        len(img_list), predict_time))
 
 if __name__ == "__main__":
     main(utility.parse_args())

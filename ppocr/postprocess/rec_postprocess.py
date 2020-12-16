@@ -23,14 +23,16 @@ class BaseRecLabelDecode(object):
                  character_dict_path=None,
                  character_type='ch',
                  use_space_char=False):
-        support_character_type = ['ch', 'en', 'en_sensitive']
+        support_character_type = [
+            'ch', 'en', 'en_sensitive', 'french', 'german', 'japan', 'korean'
+        ]
         assert character_type in support_character_type, "Only {} are supported now but get {}".format(
-            support_character_type, self.character_str)
+            support_character_type, character_type)
 
         if character_type == "en":
             self.character_str = "0123456789abcdefghijklmnopqrstuvwxyz"
             dict_character = list(self.character_str)
-        elif character_type == "ch":
+        elif character_type in ["ch", "french", "german", "japan", "korean"]:
             self.character_str = ""
             assert character_dict_path is not None, "character_dict_path should not be None when character_type is ch"
             with open(character_dict_path, "rb") as fin:
@@ -153,7 +155,7 @@ class AttnLabelDecode(BaseRecLabelDecode):
             return text
         label = self.decode(label, is_remove_duplicate=False)
         return text, label
-    
+
     def encoder(self, labels, labels_length):
         """
         used to encoder labels readed from LMDB dataset, forexample:
@@ -162,11 +164,15 @@ class AttnLabelDecode(BaseRecLabelDecode):
         """
         if isinstance(labels, paddle.Tensor):
             labels = labels.numpy()
-        batch_max_length = labels.shape[1] + 2  # add start token 'sos' and end token 'eos'
-        new_labels = np.zeros([labels.shape[0],  batch_max_length]).astype(np.int64)
+        batch_max_length = labels.shape[
+            1] + 2  # add start token 'sos' and end token 'eos'
+        new_labels = np.zeros(
+            [labels.shape[0], batch_max_length]).astype(np.int64)
         for i in range(labels.shape[0]):
-            new_labels[i, 1:1+labels_length[i]] = labels[i, :labels_length[i]]  # new_labels[i, 0] = 'sos' token
-            new_labels[i, labels_length[i]+1] = len(self.character) - 1  # add end charactor 'eos' token
+            new_labels[i, 1:1 + labels_length[i]] = labels[i, :labels_length[
+                i]]  # new_labels[i, 0] = 'sos' token
+            new_labels[i, labels_length[i] + 1] = len(
+                self.character) - 1  # add end charactor 'eos' token
         return new_labels
 
     def get_ignored_tokens(self):
