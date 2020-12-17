@@ -144,7 +144,10 @@ class TextDetector(object):
             self.predictor.zero_copy_run()
         else:
             im = paddle.fluid.core.PaddleTensor(img)
-            self.predictor.run([im])
+            self.input_tensor.copy_from_cpu(img)
+#             self.predictor.run([im])
+            self.predictor.run()
+        elapse = time.time() - starttime
         outputs = []
         for output_tensor in self.output_tensors:
             output = output_tensor.copy_to_cpu()
@@ -155,7 +158,7 @@ class TextDetector(object):
         post_result = self.postprocess_op(preds, shape_list)
         dt_boxes = post_result[0]['points']
         dt_boxes = self.filter_tag_det_res(dt_boxes, ori_im.shape)
-        elapse = time.time() - starttime
+#         elapse = time.time() - starttime
         return dt_boxes, elapse
 
 

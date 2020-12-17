@@ -105,8 +105,11 @@ class TextRecognizer(object):
                 self.input_tensor.copy_from_cpu(norm_img_batch)
                 self.predictor.zero_copy_run()
             else:
-                norm_img_batch = fluid.core.PaddleTensor(norm_img_batch)
-                self.predictor.run([norm_img_batch])
+#                 norm_img_batch = fluid.core.PaddleTensor(norm_img_batch)
+                self.input_tensor.copy_from_cpu(norm_img_batch)
+                self.predictor.run()
+#                 self.predictor.run([norm_img_batch])
+            elapse += time.time() - starttime
             outputs = []
             for output_tensor in self.output_tensors:
                 output = output_tensor.copy_to_cpu()
@@ -115,7 +118,7 @@ class TextRecognizer(object):
             rec_result = self.postprocess_op(preds)
             for rno in range(len(rec_result)):
                 rec_res[indices[beg_img_no + rno]] = rec_result[rno]
-            elapse += time.time() - starttime
+#             elapse += time.time() - starttime
         return rec_res, elapse
 
 
